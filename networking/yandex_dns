@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+# Usage
+# ./yandex_dns record_id domain subdomain ttl [record_id domain subdomain ttl ...]
+
+# Get your token from
+# https://pddimp.yandex.ru/token/index.xml?domain=yourdomain.com
+token="<your token here>"
+
+# Get DNS information from
+# https://pddimp.yandex.ru/nsapi/get_domain_records.xml?token=your_token_here&domain=yourdomain.com
+
+# Path to file which store ip
+ip_file="/home/pi/.cur_ip.txt"
+
+
+
+args=("$@")
+
+old_ip=$(cat $ip_file)
+cur_ip=$(/usr/bin/curl -sL http://icanhazip.com)
+
+if [ "$cur_ip" != "$old_ip" ]
+then
+	echo $cur_ip > $ip_file
+        i="0"
+        while [ $i -le $# ]
+        do
+            record_id=${args[$[$i+0]]}
+            domain=${args[$[$i+1]]}
+            subdomain=${args[$[$i+2]]}
+            ttl=${args[$[$i+3]]}
+
+            ya_pdd_url="https://pddimp.yandex.ru/nsapi/edit_a_record.xml?"
+            query_url="${ya_pdd_url}token=${token}&record_id=${record_id}&domain=${domain}&subdomain=${subdomain}&ttl=${ttl}&content=${cur_ip}"
+            ya_pdd_response=$(/usr/bin/curl -sL $query_url)
+
+            i=$[$i+4]
+        done
+fi
