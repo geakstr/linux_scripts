@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# systat — Raspberry PI current system info
+
+# For work vcgencmd maybe you should does this actions:
+# sudo -i
+# usermod -a -G video you_user
+# ln -s /opt/vc/bin/vcgencmd /usr/bin/vcgencmd
+# echo 'SUBSYSTEM=="vchiq",GROUP="video",MODE="0660"' > /etc/udev/rules.d/10-vchiq-permissions.rules
+# exit
+# sudo reboot
+
+function convert_to_MHz {
+    let value=$1/1000
+    echo "$value"
+}
+
+function calculate_overvolts {
+    let overvolts=${1#*.}-20
+    echo "$overvolts"
+}
+
+temp=$(vcgencmd measure_temp)
+temp=${temp:5:4}
+
+volts=$(vcgencmd measure_volts)
+volts=${volts:5:4}
+
+if [ $volts != "1.20" ]; then
+    overvolts=$(calculate_overvolts $volts)
+fi
+
+minFreq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq)
+minFreq=$(convert_to_MHz $minFreq)
+
+maxFreq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq)
+maxFreq=$(convert_to_MHz $maxFreq)
+
+freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq)
+freq=$(convert_to_MHz $freq)
+
+governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
+
+free_data="$(free)"
+mem_data="$(echo "$free_data" | grep 'Mem:')"
+free_mem="$(echo "$mem_data" | awk '{print $4}')"
+buffers="$(echo "$mem_data" | awk '{print $6}')"
+cache="$(echo "$mem_data" | awk '{print $7}')"
+total_free=$((free_mem + buffers + cache))
+used_swap="$(echo "$free_data" | grep 'Swap:' | awk '{print $3}')"
+
+echo "$temp°C | $volts V | $minFreq/$maxFreq/$freq MHz | $governor"
+echo "Free mem: $((total_free / 1024)) MB | Swap: $((used_swap / 1024)) MB"
+
+if [[ $used_swap -eq 0 ]]; then
+    echo "No swap is in use"
+elif [[ $used_swap -lt $total_free ]]; then
+    echo "Freeing swap..."
+    sudo swapoff -a
+    sudo swapon -a
+else
+    echo "Not enough free memory. Exiting."
+    exit 1
+fi
+
+exit 0
